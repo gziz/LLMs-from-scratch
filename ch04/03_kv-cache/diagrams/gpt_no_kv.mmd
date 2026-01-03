@@ -1,0 +1,37 @@
+flowchart LR
+    subgraph Input
+        X["X<br/>(B, T, M)"]
+    end
+    
+    subgraph Projections
+        X -->|WQ| Q1["Q<br/>(B, T, M)"]
+        X -->|WK| K1["K<br/>(B, T, M)"]
+        X -->|WV| V1["V<br/>(B, T, M)"]
+    end
+    
+    subgraph Reshape_Transpose["Reshape & Transpose"]
+        Q1 -->|".view(B, T, H, Hdim)<br/>.transpose(1, 2)"| Q3["Q<br/>(B, H, T, Hdim)"]
+        K1 -->|".view(B, T, H, Hdim)<br/>.transpose(1, 2)"| K3["K<br/>(B, H, T, Hdim)"]
+        V1 -->|".view(B, T, H, Hdim)<br/>.transpose(1, 2)"| V3["V<br/>(B, H, T, Hdim)"]
+    end
+    
+    subgraph Attention
+        Q3 --> QKT["Q @ K^T"]
+        K3 -->|".transpose(2, 3)"| QKT
+        QKT --> attn1["attn_scores<br/>(B, H, T, T)"]
+        attn1 -->|"Apply <br/>causal mask"| attn2["attn_scores<br/>(B, H, T, T)"]
+        attn2 -->|"÷ sqrt(d_k) &<br/>Softmax"| attn3["attn_weights<br/>(B, H, T, T)"]
+        attn3 -->|"Dropout <br/>(training only)"| attn4["attn_weights<br/>(B, H, T, T)"]
+        attn4 --> matmul["attn_weights @ V"]
+        V3 --> matmul
+    end
+    
+    subgraph Concat_Heads["Concatenate Heads"]
+        matmul --> context["context<br/>(B, H, T, Hdim)"]
+        context -->|".transpose(1, 2)"| context2["context<br/>(B, T, H, Hdim)"]
+        context2 -->|".contiguous()<br/>.view(B, T, M)"| context3["context<br/>(B, T, M)"]
+    end
+    
+    subgraph Output_Projection["Output Projection"]
+        context3 -->|"Wo"| out["Output<br/>(B, T, M)"]
+    end
